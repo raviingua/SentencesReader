@@ -111,18 +111,31 @@
      change, so nothing reflows while it's read aloud, and never a hue
      (just grayscale), so it also reads clearly on e-ink screens. */
   .inner{display:flex;flex-direction:column;gap:16px}
+  /* One "pair" per sentence in a sentence-paired block (see
+     renderSentencePairedBlock) — its own French line + English line,
+     stacked, with a tighter gap than the gap between whole pairs. For an
+     ordinary (non-sentence) block, .inner's direct children are just the
+     one frBlock and one enBlock, so .pair never applies there. */
+  .pair{display:flex;flex-direction:column;gap:8px}
   .frBlock,.enBlock{font-family:"Linux Libertine","Libertinus Serif",Georgia,serif;
     font-size:calc(clamp(19px,4.6vw,32px) * var(--mainScale,1));line-height:1.55;text-align:left;
     font-style:normal;color:#000}
   .enBlock{background:#f7f7f7;border:1px solid #ddd;border-radius:6px;padding:0.6em 0.9em}
   /* Individual sentence/line spans (wrapped in at render time — see
-     applySentenceSpans in the script). Invisible by default; only the ONE
+     applySentenceSpans in the script — for an ordinary block) OR, for a
+     sentence-paired block, the frBlock/enBlock line divs themselves carry
+     this class directly (see renderSentencePairedBlock) instead of wrapping
+     spans inside them. Either way: invisible by default; only the ONE
      currently-speaking segment gets styled, via the highlight-mode button. */
   .ttsSeg{}
   .stage[data-hl="underline"] .ttsSeg.speaking{
     text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
   .stage[data-hl="highlight"] .ttsSeg.speaking{background:#d8d8d8;border-radius:3px}
   .stage[data-hl="highlight"] .enBlock .ttsSeg.speaking{background:#cfcfcf}
+  /* Sentence-paired case: the .enBlock IS the .ttsSeg (no descendant span),
+     so the descendant selector above never matches it — this compound
+     selector covers that shape instead. */
+  .stage[data-hl="highlight"] .enBlock.ttsSeg.speaking{background:#cfcfcf}
 
   .controls{display:flex;flex-direction:column;flex:0 0 auto;transition:opacity .2s,max-height .2s;overflow:hidden}
   .controls.hidden{max-height:0;opacity:0;pointer-events:none}
@@ -196,7 +209,7 @@
     </div>
     <div class="field"><label>Chapter</label><select id="chapterSelect" disabled></select></div>
     <div class="field" id="passField" style="display:none"><label>Password</label>
-      <input type="password" id="bookPass" placeholder="Passphrase for your books" autocomplete="off">
+      <input type="password" id="bookPass" placeholder="Passphrase for your books" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
       <label class="remember"><input type="checkbox" id="bookRemember"> Remember on this device</label>
     </div>
     <div class="row"><button class="btn" id="loadChapterBtn" disabled>Load chapter &amp; read</button></div>
@@ -420,7 +433,7 @@
       .catch(function(e){
         if(e&&e.noPass){ $('err').textContent='Enter your books password above, then tap Load.'; }
         else if(e&&e.load){ $('err').textContent='Could not load that book file ('+b.file+').'; }
-        else { CRYPTO_KEY=null; keyPass=null; $('err').textContent='Wrong password, or the book couldn\u2019t be decrypted.'; }
+        else { console.error('decrypt failed:', e); CRYPTO_KEY=null; keyPass=null; $('err').textContent='Wrong password, or the book couldn\u2019t be decrypted.'; }
       });
   }
 
@@ -786,7 +799,7 @@
     for(var i=1;i<arr.length;i++){ if(arr[i]>out[out.length-1]) out.push(arr[i]); }
     return out;
   }
-  function applySentenceSpans(el){
+  function applySentenceSpans(el, lang){
     var extracted=extractPlainAndMap(el);
     if(!extracted.text.trim()) return { text:extracted.text, boundaries:[0,extracted.text.length] };
     var bpoints=computeBoundaries(extracted.text, extracted.brOffsets);
@@ -805,7 +818,7 @@
           while(node2 && node2.nodeType===3 && consumed<t.length){
             var len2=node2.nodeValue.length;
             var idx=segIdxFor(offset+consumed);
-            var span=document.createElement('span'); span.className='ttsSeg'; span.setAttribute('data-seg',idx);
+            var span=document.createElement('span'); span.className='ttsSeg'; span.setAttribute('data-seg',idx); span.setAttribute('data-lang',lang);
             var nextSib=node2.nextSibling;
             node2.parentNode.insertBefore(span,node2); span.appendChild(node2);
             consumed+=len2; node2=nextSib;
@@ -831,14 +844,27 @@
      punctuation (applySentenceSpans, used for ordinary blocks), the exact
      boundaries are already known from the data — so display spans are built
      directly, one per sentence, tagged data-seg=<sentence index>. */
-  function renderSentencePairedBlock(b, frEl, enEl){
+  // Renders a sentence-paired block as a stack of small pairs — one French
+  // line + one English line per sentence, in that order (or reversed, per
+  // the langOrder toggle) — appended straight into `container` (the page's
+  // .inner). This is deliberately NOT one merged frBlock/enBlock: each line
+  // div IS its own highlight target, tagged data-seg=<sentence index> and
+  // data-lang=fr/en, so highlightSentenceUnit/updateSegHighlight can find it
+  // directly with no nested spans needed (there's nothing to split — each
+  // div is already exactly one sentence).
+  function renderSentencePairedBlock(b, container){
+    var order = langOrder==='en' ? ['en','fr'] : ['fr','en'];
     b.sentences.forEach(function(s,i){
-      var fs=document.createElement('span'); fs.className='ttsSeg'; fs.setAttribute('data-seg',i);
-      fs.innerHTML=(i>0?' ':'')+(s.fr||'');
-      frEl.appendChild(fs);
-      var es=document.createElement('span'); es.className='ttsSeg'; es.setAttribute('data-seg',i);
-      es.innerHTML=(i>0?' ':'')+(s.en||'');
-      enEl.appendChild(es);
+      var pair=document.createElement('div'); pair.className='pair';
+      order.forEach(function(lang){
+        var div=document.createElement('div');
+        div.className=(lang==='fr'?'frBlock':'enBlock')+' ttsSeg';
+        div.setAttribute('data-seg', i);
+        div.setAttribute('data-lang', lang);
+        div.innerHTML=(lang==='fr'?s.fr:s.en)||'';
+        pair.appendChild(div);
+      });
+      container.appendChild(pair);
     });
   }
   // Concatenated text + matching boundaries for ONE language across all of a
@@ -873,9 +899,9 @@
   }
   function highlightSentenceUnit(unit){
     clearSegHighlight();
-    var el=$(unit.lang==='fr' ? 'frBlockEl' : 'enBlockEl');
-    if(!el) return;
-    var span=el.querySelector('.ttsSeg[data-seg="'+unit.i+'"]');
+    // No shared container to scope into any more (see renderSentencePairedBlock)
+    // — data-seg + data-lang together already uniquely identify the one line div.
+    var span=document.querySelector('.ttsSeg[data-seg="'+unit.i+'"][data-lang="'+unit.lang+'"]');
     if(span) span.classList.add('speaking');
   }
   function durationForUnit(unit){
@@ -885,19 +911,20 @@
   }
   var frSeg=null, enSeg=null; // {text, boundaries} for the currently-rendered block, set in renderBlock()
   function updateSegHighlight(lang, absoluteCharIdx){
+    // Queried globally by data-lang rather than scoped to a single fr/en
+    // container: an ordinary block still has one frBlockEl/enBlockEl with
+    // nested data-lang spans, while a sentence-paired block has many
+    // separate frBlock/enBlock line-divs carrying data-lang directly —
+    // this one query matches either shape.
     var seg = lang==='fr' ? frSeg : enSeg;
-    var el = $(lang==='fr' ? 'frBlockEl' : 'enBlockEl');
-    if(!seg || !el) return;
+    if(!seg) return;
     var idx = segIndexForOffset(seg.boundaries, absoluteCharIdx);
-    var spans=el.querySelectorAll('.ttsSeg');
+    var spans=document.querySelectorAll('.ttsSeg[data-lang="'+lang+'"]');
     for(var i=0;i<spans.length;i++) spans[i].classList.toggle('speaking', spans[i].getAttribute('data-seg')===String(idx));
   }
   function clearSegHighlight(){
-    ['frBlockEl','enBlockEl'].forEach(function(id){
-      var el=$(id); if(!el) return;
-      var spans=el.querySelectorAll('.ttsSeg.speaking');
-      for(var i=0;i<spans.length;i++) spans[i].classList.remove('speaking');
-    });
+    var spans=document.querySelectorAll('.ttsSeg.speaking');
+    for(var i=0;i<spans.length;i++) spans[i].classList.remove('speaking');
   }
 
   // `base` is the absolute offset (into the full frSeg/enSeg text) that
@@ -989,19 +1016,21 @@
     var b=blocks[idx];
     if(!b){ $('pos').textContent=0; $('total').textContent=0; $('playBtn').textContent='\u25b6'; frSeg=null; enSeg=null; return; }
     if(b.label){ var lab=document.createElement('div'); lab.className='blockLabel'; lab.textContent=b.label; inner.appendChild(lab); }
-    var fr=document.createElement('div'); fr.className='frBlock'; fr.id='frBlockEl';
-    var en=document.createElement('div'); en.className='enBlock'; en.id='enBlockEl';
     if(Array.isArray(b.sentences)){
-      renderSentencePairedBlock(b, fr, en);
+      // Sentence-paired: no shared frBlockEl/enBlockEl containers — each
+      // sentence gets its own pair of line-divs, appended directly.
+      renderSentencePairedBlock(b, inner);
       frSeg=buildSegFromSentences(b,'fr');
       enSeg=buildSegFromSentences(b,'en');
     } else {
+      var fr=document.createElement('div'); fr.className='frBlock'; fr.id='frBlockEl';
+      var en=document.createElement('div'); en.className='enBlock'; en.id='enBlockEl';
       fr.innerHTML=b.fr||''; en.innerHTML=b.en||'';
-      frSeg=applySentenceSpans(fr);
-      enSeg=applySentenceSpans(en);
+      frSeg=applySentenceSpans(fr,'fr');
+      enSeg=applySentenceSpans(en,'en');
+      if(langOrder==='en'){ inner.appendChild(en); inner.appendChild(fr); }
+      else { inner.appendChild(fr); inner.appendChild(en); }
     }
-    if(langOrder==='en'){ inner.appendChild(en); inner.appendChild(fr); }
-    else { inner.appendChild(fr); inner.appendChild(en); }
     $('pos').textContent=blocks.length?idx+1:0;
     $('total').textContent=blocks.length;
     $('playBtn').textContent=(playing && !paused)?'\u275a\u275a':'\u25b6';
@@ -1245,16 +1274,23 @@
   // Which language block (French, on top, or English, below it) sits under
   // a given viewport Y coordinate — used to decide what a middle-zone
   // double-tap should read.
+  // A sentence-paired page has many frBlock/enBlock line-divs (one pair per
+  // sentence) rather than a single one of each, so this scans all of them —
+  // works the same for an ordinary block, which just has one of each.
   function langAtY(y){
-    var fr=$('frBlockEl'), en=$('enBlockEl');
-    if(en){ var re=en.getBoundingClientRect(); if(y>=re.top && y<=re.bottom) return 'en'; }
-    if(fr){ var rf=fr.getBoundingClientRect(); if(y>=rf.top && y<=rf.bottom) return 'fr'; }
-    if(fr && en){
-      var rf2=fr.getBoundingClientRect(), re2=en.getBoundingClientRect();
-      var midFr=(rf2.top+rf2.bottom)/2, midEn=(re2.top+re2.bottom)/2;
-      return Math.abs(y-midFr)<=Math.abs(y-midEn) ? 'fr' : 'en';
+    var els=Array.prototype.slice.call(document.querySelectorAll('#textInner .frBlock, #textInner .enBlock'));
+    if(!els.length) return 'fr';
+    for(var i=0;i<els.length;i++){
+      var r=els[i].getBoundingClientRect();
+      if(y>=r.top && y<=r.bottom) return els[i].classList.contains('enBlock') ? 'en' : 'fr';
     }
-    return fr ? 'fr' : 'en';
+    var best=els[0], bestD=Infinity;
+    els.forEach(function(el){
+      var r=el.getBoundingClientRect();
+      var mid=(r.top+r.bottom)/2, d=Math.abs(y-mid);
+      if(d<bestD){ bestD=d; best=el; }
+    });
+    return best.classList.contains('enBlock') ? 'en' : 'fr';
   }
 
   var actions={toggle:toggle, reset:reset, replay:replayBlock,
