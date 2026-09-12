@@ -742,6 +742,7 @@
   // stays 0 and resume just restarts that language from its own start —
   // still better than losing the whole block.
   var paused=false, activeChunk=null, pausedResume=null;
+  var sentenceUnits=null, sentenceUnitIdx=0; // non-null only while actively alternating through a sentence-paired block's units
   var fallbackTimer=null, fallbackDeadline=null;
 
   /* ---- sentence/line segmentation, for highlighting only the part being
@@ -821,6 +822,66 @@
   function segIndexForOffset(boundaries, pos){
     for(var i=0;i<boundaries.length-1;i++){ if(pos>=boundaries[i] && pos<boundaries[i+1]) return i; }
     return Math.max(0, boundaries.length-2);
+  }
+  /* ---- sentence-PAIRED blocks (build_books_sentences.js) ----
+     A block from that script looks like { label?, sentences:[{fr,en,frText,
+     enText}, ...] } instead of this reader's usual flat { label?, fr, en,
+     frText, enText }. Array.isArray(b.sentences) is how every function below
+     tells the two apart. Rather than guessing sentence boundaries from
+     punctuation (applySentenceSpans, used for ordinary blocks), the exact
+     boundaries are already known from the data — so display spans are built
+     directly, one per sentence, tagged data-seg=<sentence index>. */
+  function renderSentencePairedBlock(b, frEl, enEl){
+    b.sentences.forEach(function(s,i){
+      var fs=document.createElement('span'); fs.className='ttsSeg'; fs.setAttribute('data-seg',i);
+      fs.innerHTML=(i>0?' ':'')+(s.fr||'');
+      frEl.appendChild(fs);
+      var es=document.createElement('span'); es.className='ttsSeg'; es.setAttribute('data-seg',i);
+      es.innerHTML=(i>0?' ':'')+(s.en||'');
+      enEl.appendChild(es);
+    });
+  }
+  // Concatenated text + matching boundaries for ONE language across all of a
+  // sentence-paired block's sentences — used only for the middle-tap
+  // "read the whole paragraph in just this language" case (speakSingleLang),
+  // which can reuse the ordinary char-offset pause/resume + highlight path
+  // since data-seg indices here line up exactly with the per-sentence spans.
+  function buildSegFromSentences(b, lang){
+    var text='', boundaries=[0];
+    b.sentences.forEach(function(s,i){
+      if(i>0) text+=' ';
+      text += (lang==='fr'?s.frText:s.enText)||'';
+      boundaries.push(text.length);
+    });
+    return { text:text, boundaries:boundaries };
+  }
+  // The flat, ordered sequence of (sentence index, language) "units" the
+  // main alternating playback walks through for a sentence-paired block —
+  // e.g. French‑first: [(0,fr),(0,en),(1,fr),(1,en),...]. Order follows the
+  // same langOrder toggle as everything else, and a language toggled off in
+  // the FR/EN read buttons is simply skipped, same as ordinary blocks.
+  function buildSentenceUnits(b){
+    var order = langOrder==='en' ? ['en','fr'] : ['fr','en'];
+    var units=[];
+    b.sentences.forEach(function(s,i){
+      order.forEach(function(lang){
+        var text=(lang==='fr'?s.frText:s.enText)||'';
+        if(langEnabled[lang] && text.trim()) units.push({ i:i, lang:lang, text:text });
+      });
+    });
+    return units;
+  }
+  function highlightSentenceUnit(unit){
+    clearSegHighlight();
+    var el=$(unit.lang==='fr' ? 'frBlockEl' : 'enBlockEl');
+    if(!el) return;
+    var span=el.querySelector('.ttsSeg[data-seg="'+unit.i+'"]');
+    if(span) span.classList.add('speaking');
+  }
+  function durationForUnit(unit){
+    var words=(unit.text||'').split(/\s+/).filter(Boolean).length;
+    var avgWpm=wpm[unit.lang]||150;
+    return Math.max(500, words/avgWpm*60000) * (repeatCount+1);
   }
   var frSeg=null, enSeg=null; // {text, boundaries} for the currently-rendered block, set in renderBlock()
   function updateSegHighlight(lang, absoluteCharIdx){
@@ -928,12 +989,19 @@
     var b=blocks[idx];
     if(!b){ $('pos').textContent=0; $('total').textContent=0; $('playBtn').textContent='\u25b6'; frSeg=null; enSeg=null; return; }
     if(b.label){ var lab=document.createElement('div'); lab.className='blockLabel'; lab.textContent=b.label; inner.appendChild(lab); }
-    var fr=document.createElement('div'); fr.className='frBlock'; fr.id='frBlockEl'; fr.innerHTML=b.fr||'';
-    var en=document.createElement('div'); en.className='enBlock'; en.id='enBlockEl'; en.innerHTML=b.en||'';
+    var fr=document.createElement('div'); fr.className='frBlock'; fr.id='frBlockEl';
+    var en=document.createElement('div'); en.className='enBlock'; en.id='enBlockEl';
+    if(Array.isArray(b.sentences)){
+      renderSentencePairedBlock(b, fr, en);
+      frSeg=buildSegFromSentences(b,'fr');
+      enSeg=buildSegFromSentences(b,'en');
+    } else {
+      fr.innerHTML=b.fr||''; en.innerHTML=b.en||'';
+      frSeg=applySentenceSpans(fr);
+      enSeg=applySentenceSpans(en);
+    }
     if(langOrder==='en'){ inner.appendChild(en); inner.appendChild(fr); }
     else { inner.appendChild(fr); inner.appendChild(en); }
-    frSeg=applySentenceSpans(fr);
-    enSeg=applySentenceSpans(en);
     $('pos').textContent=blocks.length?idx+1:0;
     $('total').textContent=blocks.length;
     $('playBtn').textContent=(playing && !paused)?'\u275a\u275a':'\u25b6';
@@ -981,8 +1049,13 @@
   // read toggles (this is an explicit single-language request from a
   // middle-zone double-tap, not the general "what to read" setting).
   function speakSingleLang(b, lang, done){
-    var seg = lang==='fr' ? frSeg : enSeg;
-    var text = seg ? seg.text : (lang==='fr' ? (b.frText||'') : (b.enText||''));
+    var text;
+    if(Array.isArray(b.sentences)){
+      text=b.sentences.map(function(s){ return (lang==='fr'?s.frText:s.enText)||''; }).filter(Boolean).join(' ');
+    } else {
+      var seg = lang==='fr' ? frSeg : enSeg;
+      text = seg ? seg.text : (lang==='fr' ? (b.frText||'') : (b.enText||''));
+    }
     if(!text || !text.trim()){ done(); return; }
     speakChunk(lang, text, done, 0);
   }
@@ -1020,7 +1093,10 @@
   // the timed fallback below. Multiplied by the repeat count so the silent
   // fallback still paces itself the same way repeats would with real TTS.
   function durationForBlock(b){
-    var words=((b.frText||'')+' '+(b.enText||'')).split(/\s+/).filter(Boolean).length;
+    var text = Array.isArray(b.sentences)
+      ? b.sentences.map(function(s){ return (s.frText||'')+' '+(s.enText||''); }).join(' ')
+      : (b.frText||'')+' '+(b.enText||'');
+    var words=text.split(/\s+/).filter(Boolean).length;
     var avgWpm=((wpm.fr+wpm.en)/2)||150;
     return Math.max(800, words/avgWpm*60000) * (repeatCount+1);
   }
@@ -1032,11 +1108,41 @@
   function runCurrentBlock(){
     if(!playing)return;
     var b=blocks[idx]; if(!b){ stop(); return; }
+    if(Array.isArray(b.sentences)){
+      sentenceUnits=buildSentenceUnits(b); sentenceUnitIdx=0;
+      if(!sentenceUnits.length){ advanceOrStop(); return; } // nothing enabled/available — skip this block
+      runCurrentBlockSentenceUnit();
+      return;
+    }
+    sentenceUnits=null;
     if(!hasTTS){ startFallbackTimer(durationForBlock(b), advanceOrStop); return; }
     speakWithRepeats(function(cb){ speakBlockPair(b, cb); }, advanceOrStop);
   }
+  // Main alternating playback for a sentence-paired block: walks
+  // sentenceUnits one at a time (French sentence 1, English sentence 1,
+  // French sentence 2, ... or reversed per the order toggle), repeating
+  // each individual sentence repeatCount extra times before moving to the
+  // next unit, then falls through to advanceOrStop once every unit is done
+  // (which moves on to the next paragraph block exactly as usual). Pausing
+  // mid-unit needs no character-offset slicing at all — see pauseReading —
+  // since each unit is already just one short sentence; resuming simply
+  // replays the current unit from its own start.
+  function runCurrentBlockSentenceUnit(){
+    if(!playing || paused) return;
+    var unit=sentenceUnits && sentenceUnits[sentenceUnitIdx];
+    if(!unit){ sentenceUnits=null; advanceOrStop(); return; }
+    highlightSentenceUnit(unit);
+    if(!hasTTS){ startFallbackTimer(durationForUnit(unit), sentenceUnitDone); return; }
+    speakWithRepeats(function(cb){ speakChunk(unit.lang, unit.text, cb, 0); }, sentenceUnitDone);
+  }
+  function sentenceUnitDone(){
+    if(!playing || paused) return;
+    sentenceUnitIdx++;
+    runCurrentBlockSentenceUnit();
+  }
   function stop(){
     playing=false; paused=false; pausedResume=null; activeChunk=null; curLangPlaying=null;
+    sentenceUnits=null; sentenceUnitIdx=0;
     clearTimeout(fallbackTimer); fallbackDeadline=null;
     if(hasTTS){ try{ window.speechSynthesis.cancel(); }catch(e){} }
     clearSegHighlight();
@@ -1057,7 +1163,15 @@
   function pauseReading(){
     if(!playing || paused) return;
     paused=true;
-    if(hasTTS && activeChunk){
+    if(sentenceUnits){
+      // Sentence-paired block, mid-alternation: no char-offset slicing to
+      // do — each unit is already one short sentence, so resume just
+      // replays the CURRENT unit (sentenceUnitIdx unchanged) from its start.
+      if(hasTTS){ try{ window.speechSynthesis.cancel(); }catch(e){} }
+      activeChunk=null; curLangPlaying=null; clearSegHighlight();
+      clearTimeout(fallbackTimer); fallbackDeadline=null;
+      pausedResume={ type:'sentenceUnit' };
+    } else if(hasTTS && activeChunk){
       var chunk=activeChunk; activeChunk=null;
       var seg = chunk.lang==='fr' ? frSeg : enSeg;
       var fullText = seg ? seg.text : chunk.text;
@@ -1086,7 +1200,8 @@
     paused=false;
     var pr=pausedResume; pausedResume=null;
     if(pr){
-      if(pr.type==='tts') speakChunkWithRetry(pr.lang, pr.text, pr.onEnd, pr.base);
+      if(pr.type==='sentenceUnit') runCurrentBlockSentenceUnit();
+      else if(pr.type==='tts') speakChunkWithRetry(pr.lang, pr.text, pr.onEnd, pr.base);
       else if(pr.type==='timer') startFallbackTimer(pr.ms, pr.onEnd);
     } else {
       runCurrentBlock(); // nothing was mid-flight (e.g. paused between blocks) — just continue normally
@@ -1116,6 +1231,7 @@
   function runCurrentBlockSingleLang(lang){
     if(!playing)return;
     var b=blocks[idx]; if(!b){ stop(); return; }
+    sentenceUnits=null; // this is the whole-paragraph-one-language path, not the alternating loop
     if(!hasTTS){ startFallbackTimer(durationForBlock(b), advanceOrStop); return; }
     speakWithRepeats(function(cb){ speakSingleLang(b, lang, cb); }, advanceOrStop);
   }
