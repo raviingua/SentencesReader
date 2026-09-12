@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>FR/EN Book Reader</title>
+<style>
+  :root{
+    --bg:#0c0d10; --panel:#15171d; --line:#262a33; --dim:#8b8f99; --text:#f0ede6;
+    --accent:#e5342b; --sbg:#101216; --stext:#ecebe6; --en:#8ab4f8;
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f3f0; --panel:#ffffff; --line:#dedcd6; --dim:#767a82; --text:#17181c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{position:fixed;inset:0;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  .wrap{height:100%;display:flex;flex-direction:column}
+
+  #setup{padding:18px;display:flex;flex-direction:column;gap:12px;height:100%;overflow:auto}
+  h1{font-weight:700;font-size:24px;letter-spacing:-.3px}
+  h1 .dot{color:var(--accent)}
+  .sub{color:var(--dim);font-size:13px;line-height:1.5;max-width:56ch}
+  .field{display:flex;flex-direction:column;gap:6px}
+  .field label{font-size:10.5px;letter-spacing:.6px;color:var(--dim);text-transform:uppercase}
+  .field label b{color:var(--text)}
+  .seg{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+  .seg button{flex:1;padding:11px 4px;font-size:12.5px;color:var(--dim);font-weight:500}
+  .seg button.sel{background:var(--accent);color:#fff;font-weight:600}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .row{display:flex;gap:10px}
+  select{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px;font-size:13px;font-family:inherit}
+  select:focus{outline:none;border-color:var(--accent)}
+  select:disabled{opacity:.5}
+  input[type=text],input[type=password]{width:100%;background:var(--panel);border:1px solid var(--line);border-radius:10px;color:var(--text);padding:11px;font-size:13px;font-family:inherit}
+  input[type=text]:focus,input[type=password]:focus{outline:none;border-color:var(--accent)}
+  .remember{display:flex;flex-direction:row;align-items:center;gap:7px;font-size:11px;color:var(--dim);text-transform:none;letter-spacing:0;margin-top:4px}
+  .remember input{width:auto;height:auto;accent-color:var(--accent)}
+  .btn{background:var(--accent);color:#fff;font-weight:600;font-size:16px;padding:15px 20px;border-radius:11px;flex:1}
+  .btn:disabled{opacity:.5}
+  .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--dim);font-weight:500}
+  .btn:active{transform:translateY(1px)}
+  .hint{color:var(--dim);font-size:11.5px;line-height:1.4}
+  .err{color:var(--accent);font-size:12.5px;min-height:15px}
+  hr.sep{border:none;border-top:1px solid var(--line);margin:4px 0}
+  .sectionLabel{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--dim);text-transform:uppercase;margin-top:4px}
+
+  /* typable book combobox */
+  .combo{position:relative}
+  .combo input{padding-right:34px}
+  .combo-clear{position:absolute;top:0;right:0;bottom:0;width:34px;display:none;align-items:center;justify-content:center;
+    color:var(--dim);font-size:16px;cursor:pointer}
+  .combo-clear.show{display:flex}
+  .combo-clear:active{color:var(--text)}
+  .combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);max-height:260px;overflow-y:auto;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;z-index:20;
+    box-shadow:0 12px 30px rgba(0,0,0,.35);display:none}
+  .combo-list.show{display:block}
+  .combo-list .opt{padding:11px 13px;font-size:13.5px;border-bottom:1px solid var(--line);cursor:pointer}
+  .combo-list .opt:last-child{border-bottom:none}
+  .combo-list .opt:hover,.combo-list .opt.hi{background:var(--bg)}
+  .combo-list .empty{padding:11px 13px;font-size:12.5px;color:var(--dim)}
+  .combo-list .more{padding:8px 13px;font-size:11px;color:var(--dim)}
+
+  /* wpm steppers (used both in setup and reader) */
+  .wpmRow{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:6px 8px}
+  .wpmRow .lbl{font-size:11px;color:var(--dim);font-weight:600;min-width:26px}
+  .wpmRow button{width:32px;height:32px;border-radius:8px;background:var(--bg);border:1px solid var(--line);font-size:15px;font-weight:700;display:flex;align-items:center;justify-content:center}
+  .wpmRow button:active{transform:translateY(1px)}
+  .wpmRow .val{flex:1;text-align:center;font-size:13px;font-variant-numeric:tabular-nums;font-weight:600}
+
+  #reader{display:none}
+  #reader.on{display:flex;flex-direction:column;height:100%}
+  .stage{flex:1 1 auto;min-height:0;position:relative;overflow:hidden;background:var(--sbg);color:var(--stext);transition:background .2s,color .2s}
+  .topbar{position:absolute;top:8px;left:0;right:0;display:flex;flex-direction:column;gap:6px;padding:0 54px 0 10px;z-index:5;transition:opacity .2s}
+  .topbar-row{display:flex;justify-content:space-between;align-items:center;gap:6px}
+  .pill{font-size:12px;color:var(--dim);background:rgba(0,0,0,.35);border:1px solid var(--line);border-radius:8px;padding:6px 11px;white-space:nowrap}
+  /* A hardware/lock-screen control (e.g. a headphone button) shouldn't make
+     any on-screen button visibly light up — belt-and-suspenders alongside
+     the JS blurActive() calls in case a browser still paints a focus ring. */
+  .pill:focus,.langBtn:focus{outline:none}
+  .pill.icon{padding:6px 9px;font-size:13px;line-height:1}
+  .stage[data-light="1"] .pill{background:rgba(255,255,255,.65);color:#333;border-color:#ccc}
+  .chapterNav{display:flex;align-items:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+  .topbar-right{display:flex;align-items:center;gap:6px;flex:0 0 auto}
+  .hideToggle{position:absolute;top:8px;right:10px;z-index:6}
+  .stage[data-light="1"] .hideToggle{background:rgba(255,255,255,.65);color:#333;border-color:#ccc}
+  .fontRow{justify-content:center;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .fontRow .pill{flex:0 0 auto}
+
+  .chapterToast{position:absolute;top:64px;left:50%;transform:translateX(-50%);max-width:88%;
+    background:rgba(0,0,0,.75);color:#fff;font-size:12.5px;line-height:1.4;text-align:center;
+    padding:9px 14px;border-radius:10px;z-index:8;opacity:0;pointer-events:none;transition:opacity .25s}
+  .chapterToast.show{opacity:1}
+  .stage[data-light="1"] .chapterToast{background:rgba(255,255,255,.88);color:#222;border:1px solid #ccc}
+
+  .textDisplay{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;
+    padding:70px 6% 26px;z-index:2;display:flex;align-items:center;touch-action:pan-y;
+    -webkit-user-select:none;user-select:none}
+  .textDisplay .inner{width:100%;margin:auto}
+  .blockLabel{text-align:center;font-size:12px;letter-spacing:.6px;text-transform:uppercase;color:var(--dim);margin-bottom:14px}
+  /* Reading text: pure black, matching size for both languages, no italics.
+     The paragraphs are laid out with flex `gap` (not individual margins) so
+     the spacing between them stays correct no matter which language is
+     shown first (see the order-toggle button).
+     The "speaking" state is shown via the highlight-mode button below —
+     off / underline / light-gray background — never a border or padding
+     change, so nothing reflows while it's read aloud, and never a hue
+     (just grayscale), so it also reads clearly on e-ink screens. */
+  .inner{display:flex;flex-direction:column;gap:16px}
+  .frBlock,.enBlock{font-family:"Linux Libertine","Libertinus Serif",Georgia,serif;
+    font-size:calc(clamp(19px,4.6vw,32px) * var(--mainScale,1));line-height:1.55;text-align:left;
+    font-style:normal;color:#000}
+  .enBlock{background:#f7f7f7;border:1px solid #ddd;border-radius:6px;padding:0.6em 0.9em}
+  /* Individual sentence/line spans (wrapped in at render time — see
+     applySentenceSpans in the script). Invisible by default; only the ONE
+     currently-speaking segment gets styled, via the highlight-mode button. */
+  .ttsSeg{}
+  .stage[data-hl="underline"] .ttsSeg.speaking{
+    text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
+  .stage[data-hl="highlight"] .ttsSeg.speaking{background:#d8d8d8;border-radius:3px}
+  .stage[data-hl="highlight"] .enBlock .ttsSeg.speaking{background:#cfcfcf}
+
+  .controls{display:flex;flex-direction:column;flex:0 0 auto;transition:opacity .2s,max-height .2s;overflow:hidden}
+  .controls.hidden{max-height:0;opacity:0;pointer-events:none}
+  .readout{flex:0 0 auto;display:flex;justify-content:space-between;padding:9px 18px;color:var(--dim);font-size:12px;font-variant-numeric:tabular-nums;border-top:1px solid var(--line);background:var(--panel)}
+  .readout b{color:var(--text);font-weight:600}
+  .wpmDualRow{flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px 14px 4px;background:var(--panel)}
+  .langToggleRow{flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:10px 14px 0;background:var(--panel)}
+  .langBtn{padding:11px;border-radius:10px;border:1px solid var(--line);background:var(--bg);font-weight:700;font-size:13px;color:var(--dim);letter-spacing:.4px}
+  .langBtn.sel{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .langBtn:active{transform:translateY(1px)}
+  .playRow{flex:0 0 auto;display:flex;justify-content:center;padding:6px 14px 4px;background:var(--panel)}
+  .playRow .play{width:64px;height:52px;border-radius:12px;background:var(--accent);border:1px solid var(--accent);color:#fff;font-size:22px;display:flex;align-items:center;justify-content:center}
+  .playRow .play:active{transform:translateY(1px)}
+  .navrow{flex:0 0 auto;display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px 12px 14px;background:var(--panel)}
+  .navrow button{height:44px;border-radius:10px;background:var(--bg);border:1px solid var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:16px}
+  .navrow button:active{background:#1c2027}
+  .navrow small{font-size:8px;color:var(--dim);margin-top:1px;white-space:nowrap}
+
+  .cpanel{position:absolute;left:12px;right:12px;bottom:12px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;z-index:9;display:none;box-shadow:0 12px 40px rgba(0,0,0,.5)}
+  .cpanel.on{display:block}
+  .cpanel h3{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+  .presets{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+  .preset{border:1px solid var(--line);border-radius:9px;padding:8px 12px;font-size:12px;font-weight:600}
+  .pickers{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .picker{display:flex;flex-direction:column;gap:5px;align-items:center;font-size:11px;color:var(--dim)}
+  .picker input[type=color]{width:100%;height:38px;border:1px solid var(--line);border-radius:8px;background:none;padding:2px}
+  .cpanel .done{margin-top:12px;width:100%;background:var(--accent);color:#fff;font-weight:600;padding:11px;border-radius:10px}
+
+  @media (orientation:landscape) and (max-height:560px){
+    .controls{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;align-items:stretch}
+    .readout{flex:0 0 auto;flex-direction:column;justify-content:center;align-items:flex-start;gap:1px;
+      padding:3px 10px;border-top:none;border-right:1px solid var(--line);font-size:9.5px;white-space:nowrap}
+    .wpmDualRow{flex:0 0 auto;display:flex;padding:4px 6px;gap:5px;border-right:1px solid var(--line)}
+    .langToggleRow{flex:0 0 auto;display:flex;padding:4px 6px;gap:5px;border-right:1px solid var(--line)}
+    .langBtn{padding:0 10px;height:34px;font-size:11px}
+    .wpmRow{padding:3px 5px}
+    .playRow{flex:0 0 auto;padding:4px 6px;border-right:1px solid var(--line)}
+    .playRow .play{width:44px;height:34px;font-size:16px}
+    .navrow{flex:0 0 auto;display:flex;padding:4px 6px;gap:4px}
+    .navrow button{height:34px;width:36px;border-radius:8px}
+    .navrow small{display:none}
+    .topbar{top:4px;flex-direction:row;flex-wrap:nowrap;align-items:center;gap:5px;
+      overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 40px 0 8px}
+    .topbar-row{display:contents}
+    .chapterNav{flex:0 0 auto}
+    .topbar-right{flex:0 0 auto}
+    .fontRow .pill{flex:0 0 auto}
+    .pill{padding:5px 9px;font-size:11px}
+    .fontRow{gap:4px}
+    .chapterToast{top:40px;font-size:11px;padding:7px 11px}
+    .textDisplay{padding:52px 6% 16px}
+    .hideToggle{top:4px;right:6px;padding:5px 8px;font-size:11px}
+    .enBlock{padding:0.45em 0.7em}
+    .inner{gap:10px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section id="setup">
+    <h1>Book Reader<span class="dot">.</span></h1>
+    <p class="sub">Pick a book and chapter to start reading. Each paragraph pairs its French original with the English translation right below it, and can be read aloud in both languages.</p>
+
+    <div class="field">
+      <label>Book</label>
+      <div class="combo">
+        <input type="text" id="bookInput" placeholder="Type to search a book…" autocomplete="off">
+        <button type="button" class="combo-clear" id="bookClear" title="Clear book selection">&times;</button>
+        <div class="combo-list" id="bookList"></div>
+      </div>
+    </div>
+    <div class="field"><label>Chapter</label><select id="chapterSelect" disabled></select></div>
+    <div class="field" id="passField" style="display:none"><label>Password</label>
+      <input type="password" id="bookPass" placeholder="Passphrase for your books" autocomplete="off">
+      <label class="remember"><input type="checkbox" id="bookRemember"> Remember on this device</label>
+    </div>
+    <div class="row"><button class="btn" id="loadChapterBtn" disabled>Load chapter &amp; read</button></div>
+    <p class="err" id="err"></p>
+    <p class="hint" id="libNote" style="margin-top:-6px"></p>
+
+    <hr class="sep">
+    <div class="field"><label>App theme</label>
+      <div class="seg" id="themeSeg"><button data-v="auto" class="sel">Auto</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+
+    <p class="sectionLabel">Text‑to‑speech</p>
+    <div class="field"><label>TTS voice — French</label>
+      <select id="voiceSelectFR"><option value="">Automatic</option></select></div>
+    <div class="field"><label>TTS voice — English</label>
+      <select id="voiceSelectEN"><option value="">Automatic</option></select></div>
+
+    <div class="grid2">
+      <div class="field"><label>Speed — French</label>
+        <div class="wpmRow"><button data-wpm="fr" data-d="-10">&minus;</button><span class="val" id="wpmValFR_setup">150</span><span class="lbl">wpm</span><button data-wpm="fr" data-d="10">+</button></div></div>
+      <div class="field"><label>Speed — English</label>
+        <div class="wpmRow"><button data-wpm="en" data-d="-10">&minus;</button><span class="val" id="wpmValEN_setup">250</span><span class="lbl">wpm</span><button data-wpm="en" data-d="10">+</button></div></div>
+    </div>
+
+    <div class="field"><label>Voice selection mode — French <span style="text-transform:none;color:var(--dim)">(try these if the wrong voice is used)</span></label>
+      <select id="voiceMethodFR">
+        <option value="auto">Auto (recommended – latest method)</option>
+        <option value="m1" selected>Automatic 1 – Force language code</option>
+        <option value="m2">Automatic 2 – Match global default voice</option>
+        <option value="m3">Automatic 3 – Match per-language default voice</option>
+      </select>
+    </div>
+    <div class="field"><label>Voice selection mode — English <span style="text-transform:none;color:var(--dim)">(try these if the wrong voice is used)</span></label>
+      <select id="voiceMethodEN">
+        <option value="auto">Auto (recommended – latest method)</option>
+        <option value="m1" selected>Automatic 1 – Force language code</option>
+        <option value="m2">Automatic 2 – Match global default voice</option>
+        <option value="m3">Automatic 3 – Match per-language default voice</option>
+      </select>
+    </div>
+  </section>
+
+  <section id="reader">
+    <div class="stage" id="stage">
+      <div class="topbar" id="topbar">
+        <div class="topbar-row">
+          <button class="pill" id="closeBtn">✕ Close</button>
+          <div class="chapterNav" id="chapterNav">
+            <button class="pill" id="prevChapterBtn" title="Previous chapter" style="display:none">‹ Prev</button>
+            <button class="pill" id="nextChapterBtn" title="Next chapter" style="display:none">Next ›</button>
+          </div>
+          <div class="topbar-right">
+            <button class="pill icon" id="infoBtn" title="Current chapter &amp; book">ⓘ</button>
+            <button class="pill icon" id="colorBtn" title="Colours">🎨</button>
+          </div>
+        </div>
+        <div class="topbar-row fontRow" id="fontRow">
+          <button class="pill" data-act="mainDown" title="Decrease text size">T&#8722;</button>
+          <button class="pill" data-act="mainUp" title="Increase text size">T&#43;</button>
+          <button class="pill" data-act="fontReset" title="Reset text size">&#8635;</button>
+          <button class="pill" id="hlBtn" title="Cycle how the line being read is highlighted (off / underline / gray)">Highlight: Off</button>
+          <button class="pill" id="repeatBtn" title="Repeat each block 0, 1, or 2 extra times">Repeat: Off</button>
+          <button class="pill" id="orderBtn" title="Toggle which language is shown &amp; read first">FR → EN</button>
+        </div>
+      </div>
+      <button class="pill icon hideToggle" id="hideBtn" title="Hide all controls">⤢</button>
+      <div class="chapterToast" id="chapterToast"></div>
+      <div class="textDisplay" id="textDisplay"><div class="inner" id="textInner"></div></div>
+      <div class="cpanel" id="cpanel">
+        <h3>Colours</h3>
+        <div class="presets" id="presets">
+          <button class="preset" data-bg="#ffffff" data-text="#000000">B / W</button>
+          <button class="preset" data-bg="#101216" data-text="#ecebe6">Spritz</button>
+          <button class="preset" data-bg="#f3e9d2" data-text="#43392b">Sepia</button>
+          <button class="preset" data-bg="#000000" data-text="#c9c9c9">Night</button>
+        </div>
+        <div class="pickers">
+          <label class="picker">Background<input type="color" id="bgPick" value="#101216"></label>
+          <label class="picker">Text<input type="color" id="textPick" value="#ecebe6"></label>
+        </div>
+        <button class="done" id="cdone">Done</button>
+      </div>
+    </div>
+    <div class="controls" id="controls">
+      <div class="readout">
+        <span><b id="pos">0</b> / <span id="total">0</span></span>
+        <span><b id="wpmFRr">150</b> fr wpm</span>
+        <span><b id="wpmENr">250</b> en wpm</span>
+      </div>
+      <div class="langToggleRow" id="langToggleRow">
+        <button class="langBtn sel" id="langBtnFR" data-lang="fr">Read French</button>
+        <button class="langBtn sel" id="langBtnEN" data-lang="en">Read English</button>
+      </div>
+      <div class="wpmDualRow">
+        <div class="wpmRow"><button data-wpm="fr" data-d="-10">&minus;</button><span class="val" id="wpmValFR">150</span><span class="lbl">FR</span><button data-wpm="fr" data-d="10">+</button></div>
+        <div class="wpmRow"><button data-wpm="en" data-d="-10">&minus;</button><span class="val" id="wpmValEN">250</span><span class="lbl">EN</span><button data-wpm="en" data-d="10">+</button></div>
+      </div>
+      <div class="playRow"><button class="play" data-act="toggle" id="playBtn">&#9658;</button></div>
+      <div class="navrow">
+        <button data-act="prevBlock">&#9198;<small>prev</small></button>
+        <button data-act="replay">&#8634;<small>replay</small></button>
+        <button data-act="nextBlock">&#9197;<small>next</small></button>
+        <button data-act="reset">&#8635;<small>reset</small></button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var $=function(id){return document.getElementById(id);};
+
+  /* ========== library (lazy-loaded + decrypted from ./data) ==========
+     manifest.json holds book -> chapter TITLES plus key-derivation params
+     (salt/iterations). Each book's chapters live in one AES-GCM-encrypted
+     .enc file, fetched only when you open a chapter, then decrypted
+     in-browser with a key derived from your passphrase and cached. Needs to
+     be served over https (GitHub Pages / localhost) — fetch + WebCrypto are
+     blocked when opened as a bare local file. */
+  var MANIFEST=null, bookCache={}, CRYPTO_KEY=null, keyPass=null;
+  var selectedBook=null; // manifest book entry currently chosen in the combobox
+
+  var bookInput=$('bookInput'), bookList=$('bookList'), chapSel=$('chapterSelect'),
+      bookClear=$('bookClear'), passInput=$('bookPass'), rememberBox=$('bookRemember'), loadBtn=$('loadChapterBtn');
+
+  function updateClearBtn(){ bookClear.classList.toggle('show', !!bookInput.value); }
+  function renderBookList(filter){
+    bookList.innerHTML='';
+    if(!MANIFEST){ bookList.classList.remove('show'); return; }
+    var f=(filter||'').trim().toLowerCase();
+    var matches = MANIFEST.books.filter(function(b){ return !f || b.title.toLowerCase().indexOf(f)>=0; });
+    if(!matches.length){
+      var e=document.createElement('div'); e.className='empty'; e.textContent='No matching books.';
+      bookList.appendChild(e);
+    } else {
+      // Every match is shown — the list itself scrolls (max-height + overflow-y),
+      // so nothing is hidden; typing still narrows it down, it just no longer
+      // truncates the results.
+      matches.forEach(function(b){
+        var o=document.createElement('div'); o.className='opt'; o.textContent=b.title;
+        o.addEventListener('click',function(){ chooseBook(b); });
+        bookList.appendChild(o);
+      });
+    }
+    bookList.classList.add('show');
+  }
+  function chooseBook(b){
+    selectedBook=b; bookInput.value=b.title; bookList.classList.remove('show');
+    fillChapters(); updateLoadEnabled(); updateClearBtn();
+  }
+  function clearBook(){
+    selectedBook=null; bookInput.value='';
+    fillChapters(); updateLoadEnabled(); updateClearBtn();
+    bookList.classList.remove('show');
+    bookInput.focus();
+  }
+  bookClear.addEventListener('click', clearBook);
+  function fillChapters(){
+    chapSel.innerHTML='';
+    if(!selectedBook){ chapSel.disabled=true; return; }
+    selectedBook.chapters.forEach(function(t,i){ var o=document.createElement('option'); o.value=i; o.textContent=t; chapSel.appendChild(o); });
+    chapSel.disabled=false;
+  }
+  function updateLoadEnabled(){ loadBtn.disabled = !selectedBook; }
+  bookInput.addEventListener('input',function(){
+    if(selectedBook && bookInput.value!==selectedBook.title) selectedBook=null;
+    updateLoadEnabled(); fillChapters(); updateClearBtn();
+    renderBookList(bookInput.value);
+  });
+  bookInput.addEventListener('focus',function(){ renderBookList(bookInput.value); });
+  document.addEventListener('click',function(e){
+    if(!e.target.closest('.combo')) bookList.classList.remove('show');
+  });
+
+  // remember the passphrase on this device (personal use); harmless if blocked
+  try{ var saved=localStorage.getItem('bookPass'); if(saved){ passInput.value=saved; rememberBox.checked=true; } }catch(e){}
+
+  function b64ToBuf(b64){ var s=atob(b64), a=new Uint8Array(s.length); for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i); return a; }
+  function deriveKey(pass,c){
+    return crypto.subtle.importKey('raw', new TextEncoder().encode(pass), 'PBKDF2', false, ['deriveKey'])
+      .then(function(base){ return crypto.subtle.deriveKey({name:'PBKDF2', salt:b64ToBuf(c.salt), iterations:c.iter, hash:c.hash||'SHA-256'}, base, {name:'AES-GCM', length:256}, false, ['decrypt']); });
+  }
+  function decryptBook(obj,key){
+    return crypto.subtle.decrypt({name:'AES-GCM', iv:b64ToBuf(obj.iv)}, key, b64ToBuf(obj.ct))
+      .then(function(pt){ return JSON.parse(new TextDecoder().decode(pt)); });
+  }
+  function ensureKey(){
+    if(!MANIFEST.crypto) return Promise.resolve(null);
+    var pass=passInput.value;
+    if(!pass) return Promise.reject({noPass:true});
+    if(CRYPTO_KEY && keyPass===pass) return Promise.resolve(CRYPTO_KEY);
+    return deriveKey(pass,MANIFEST.crypto).then(function(k){ CRYPTO_KEY=k; keyPass=pass; return k; });
+  }
+  function rememberPass(){ try{ if(rememberBox.checked) localStorage.setItem('bookPass',passInput.value); else localStorage.removeItem('bookPass'); }catch(e){} }
+
+  // Chapter navigation state (once a chapter has been opened). prevChapterBtn/
+  // nextChapterBtn in the topbar circle through the current book's chapters.
+  var currentBook=null, currentChapterIdx=-1;
+  function updateChapterNavUI(){
+    var has=!!currentBook;
+    $('prevChapterBtn').style.display = has ? '' : 'none';
+    $('nextChapterBtn').style.display = has ? '' : 'none';
+  }
+
+  function openChapterContent(b,ci,content){
+    var c=content.chapters[ci];
+    if(!c){ $('err').textContent='Chapter not found.'; return; }
+    currentBook=b; currentChapterIdx=ci; updateChapterNavUI();
+    $('err').textContent='';
+    loadBlocks(c.blocks);
+    updateMediaSessionMetadata();
+  }
+  function loadChapterByIndex(b,ci){
+    if(!b)return;
+    if(bookCache[b.id]){ openChapterContent(b,ci,bookCache[b.id]); return; }
+    $('err').textContent='Loading chapter\u2026';
+    ensureKey()
+      .then(function(key){ return fetch(b.file).then(function(r){ if(!r.ok)throw {load:true}; return r.json(); })
+        .then(function(raw){ return MANIFEST.crypto ? decryptBook(raw,key) : raw; }); })
+      .then(function(content){ bookCache[b.id]=content; rememberPass(); openChapterContent(b,ci,content); })
+      .catch(function(e){
+        if(e&&e.noPass){ $('err').textContent='Enter your books password above, then tap Load.'; }
+        else if(e&&e.load){ $('err').textContent='Could not load that book file ('+b.file+').'; }
+        else { CRYPTO_KEY=null; keyPass=null; $('err').textContent='Wrong password, or the book couldn\u2019t be decrypted.'; }
+      });
+  }
+
+  fetch('data/manifest.json').then(function(r){ if(!r.ok)throw 0; return r.json(); })
+    .then(function(m){ MANIFEST=m; $('passField').style.display = m.crypto ? '' : 'none'; })
+    .catch(function(){ $('libNote').textContent='Library couldn\u2019t load here — it needs to be served over https (e.g. GitHub Pages or localhost).';
+      bookInput.disabled=true; chapSel.disabled=true; passInput.disabled=true; loadBtn.disabled=true; });
+
+  loadBtn.addEventListener('click',function(){
+    if(!selectedBook)return; var ci=parseInt(chapSel.value,10)||0;
+    loadChapterByIndex(selectedBook,ci);
+  });
+  $('prevChapterBtn').addEventListener('click',function(){
+    if(!currentBook)return; var n=currentBook.chapters.length; if(!n)return;
+    loadChapterByIndex(currentBook,(currentChapterIdx-1+n)%n);
+  });
+  $('nextChapterBtn').addEventListener('click',function(){
+    if(!currentBook)return; var n=currentBook.chapters.length; if(!n)return;
+    loadChapterByIndex(currentBook,(currentChapterIdx+1)%n);
+  });
+  $('closeBtn').onclick=function(){ stop(); $('reader').classList.remove('on'); $('reader').style.display='none'; $('setup').style.display='flex'; };
+
+  /* ========== voices ========== */
+  var voices=[];
+  function loadVoices(){ try{ voices=window.speechSynthesis.getVoices()||[]; }catch(e){ voices=[]; } fillVoiceSelects(); }
+  function fillVoiceSelects(){
+    fillVoiceSelect('voiceSelectFR','fr'); fillVoiceSelect('voiceSelectEN','en');
+  }
+  function fillVoiceSelect(id,two){
+    var sel=$(id); if(!sel)return; var prev=sel.value;
+    var list=voices.filter(function(v){ return v.lang && v.lang.slice(0,2).toLowerCase()===two; });
+    list.sort(function(a,b){ return voiceScore(b)-voiceScore(a); });
+    sel.innerHTML='<option value="">Automatic</option>';
+    list.forEach(function(v){ var o=document.createElement('option'); o.value=v.voiceURI;
+      o.textContent=v.name+' ('+v.lang+')'+(v.default?' – default':''); sel.appendChild(o); });
+    if(prev){ sel.value=prev; }
+  }
+  function defaultVoice(){ return voices.filter(function(v){return v.default;})[0]||null; }
+  function voiceScore(v){ var n=(v.name||'').toLowerCase(), s=0;
+    if(v.default)s+=6;
+    if(/enhanced|premium|natural|siri/.test(n))s+=4;
+    if(/compact|eloquence|espeak/.test(n))s-=5;
+    if(v.localService)s+=1;
+    return s; }
+  // Three interchangeable voice-selection strategies (per language), tried in
+  // this order over time — user-selectable so you can compare them on your
+  // own device instead of guessing which one Safari/Android will honor.
+  function chooseVoiceM1(t){ return {forcedLang: t==='fr'?'fr-FR':'en-US'}; }
+  function chooseVoiceM2(t){
+    var def=defaultVoice();
+    if(def&&def.lang&&def.lang.slice(0,2).toLowerCase()===t) return null;
+    var m=voices.filter(function(v){return v.lang&&v.lang.slice(0,2).toLowerCase()===t;});
+    if(!m.length) return null;
+    m.sort(function(a,b){return voiceScore(b)-voiceScore(a);});
+    return m[0];
+  }
+  function chooseVoiceM3(t){
+    var m=voices.filter(function(v){return v.lang&&v.lang.slice(0,2).toLowerCase()===t;});
+    if(!m.length) return null;
+    var langDefault=m.filter(function(v){return v.default;});
+    if(langDefault.length) return langDefault[0];
+    var def=defaultVoice();
+    if(def&&def.lang&&def.lang.slice(0,2).toLowerCase()===t) return null;
+    m.sort(function(a,b){return voiceScore(b)-voiceScore(a);});
+    return m[0];
+  }
+  var voiceMethod={fr:'m1',en:'m1'};
+  function resolveVoiceMethod(t){ var m=voiceMethod[t]; return m==='auto'?'m3':m; }
+  function chooseVoice(t){
+    var method=resolveVoiceMethod(t);
+    if(method==='m1') return chooseVoiceM1(t);
+    if(method==='m2') return chooseVoiceM2(t);
+    return chooseVoiceM3(t);
+  }
+  $('voiceMethodFR').addEventListener('change',function(){ voiceMethod.fr=this.value; });
+  $('voiceMethodEN').addEventListener('change',function(){ voiceMethod.en=this.value; });
+
+  var hasTTS=('speechSynthesis' in window);
+  if(hasTTS){ loadVoices(); try{ window.speechSynthesis.onvoiceschanged=loadVoices; }catch(e){} }
+  else { $('err').textContent='Voice not available in this browser.'; }
+
+  /* ========== wpm (separate French / English speeds) ========== */
+  var wpm={fr:150, en:250};
+  var WPM_MIN=60, WPM_MAX=500;
+  function renderWpm(){
+    ['fr','en'].forEach(function(t){
+      var v=wpm[t];
+      var a=$('wpmVal'+t.toUpperCase()+'_setup'), b=$('wpmVal'+t.toUpperCase());
+      if(a)a.textContent=v; if(b)b.textContent=v;
+    });
+    $('wpmFRr').textContent=wpm.fr; $('wpmENr').textContent=wpm.en;
+  }
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('[data-wpm]'); if(!b)return;
+    var t=b.dataset.wpm, d=parseInt(b.dataset.d,10);
+    wpm[t]=Math.max(WPM_MIN,Math.min(WPM_MAX,wpm[t]+d));
+    renderWpm();
+  });
+  renderWpm();
+
+  /* ========== app theme ========== */
+  var appTheme='auto';
+  function systemPrefersDark(){ return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches); }
+  function stagePalette(theme){ return theme==='dark'?['#101216','#ecebe6']:['#ffffff','#000000']; }
+  function resolvedTheme(){ return appTheme==='auto' ? (systemPrefersDark()?'dark':'light') : appTheme; }
+  function applyPalette(bg,text){
+    var d=document.documentElement.style;
+    d.setProperty('--sbg',bg); d.setProperty('--stext',text);
+    $('bgPick').value=bg; $('textPick').value=text;
+    var lum=(parseInt(bg.slice(1,3),16)*0.299+parseInt(bg.slice(3,5),16)*0.587+parseInt(bg.slice(5,7),16)*0.114);
+    var isLight=lum>140;
+    $('stage').dataset.light=isLight?'1':'0';
+    d.setProperty('--en', isLight ? '#1a4db3' : '#8ab4f8');
+  }
+  function syncStageTheme(){ var c=stagePalette(resolvedTheme()); applyPalette(c[0],c[1]); }
+  function applyAppTheme(){ document.documentElement.setAttribute('data-theme', appTheme==='auto' ? (systemPrefersDark()?'dark':'light') : appTheme); syncStageTheme(); }
+  function seg(id,cb){ $(id).addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b)return;
+    var ch=$(id).children; for(var i=0;i<ch.length;i++)ch[i].classList.remove('sel'); b.classList.add('sel'); cb(b.dataset.v); }); }
+  seg('themeSeg',function(v){ appTheme=v; applyAppTheme(); });
+  if(window.matchMedia){ try{ window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){ if(appTheme==='auto')applyAppTheme(); }); }catch(e){} }
+  applyAppTheme();
+
+  $('presets').addEventListener('click',function(e){ var b=e.target.closest('.preset'); if(!b)return; applyPalette(b.dataset.bg,b.dataset.text); });
+  ['bgPick','textPick'].forEach(function(id){ $(id).addEventListener('input',function(){ applyPalette($('bgPick').value,$('textPick').value); }); });
+  $('colorBtn').onclick=function(){$('cpanel').classList.toggle('on');};
+  $('cdone').onclick=function(){$('cpanel').classList.remove('on');};
+  $('infoBtn').onclick=showChapterToast;
+
+  /* ========== main text size (no gloss anymore — just the paragraph text) ========== */
+  var mainScale=1, SCALE_MIN=0.6, SCALE_MAX=2.2, SCALE_STEP=0.1;
+  function applyFontScale(){ document.documentElement.style.setProperty('--mainScale', mainScale.toFixed(2)); }
+  function persistFontScale(){ try{ localStorage.setItem('mainScale', mainScale); }catch(e){} }
+  function changeScale(d){ mainScale=Math.round(Math.max(SCALE_MIN,Math.min(SCALE_MAX,mainScale+d))*100)/100; applyFontScale(); persistFontScale(); }
+  function resetFontScale(){ mainScale=1; applyFontScale(); persistFontScale(); }
+  try{ var savedScale=parseFloat(localStorage.getItem('mainScale')); if(isFinite(savedScale)&&savedScale>0) mainScale=Math.max(SCALE_MIN,Math.min(SCALE_MAX,savedScale)); }catch(e){}
+  applyFontScale();
+
+  function showChapterToast(){
+    var el=$('chapterToast'); if(!el)return;
+    var msg;
+    if(currentBook){
+      var title=(currentBook.chapters && currentBook.chapters[currentChapterIdx]) || ('Chapter '+(currentChapterIdx+1));
+      msg=currentBook.title+' — '+title;
+    } else { msg='No chapter loaded'; }
+    el.textContent=msg; el.classList.add('show');
+    clearTimeout(el._hideTimer); el._hideTimer=setTimeout(function(){ el.classList.remove('show'); },3000);
+  }
+
+  /* ========== hide-all-controls (maximize viewing area) ==========
+     The toggle button itself lives OUTSIDE #topbar (see .hideToggle) so it
+     stays visible and clickable even while hidden — otherwise there'd be no
+     way to bring the controls back. Icon/title flip to make the state and
+     the fact that tapping it reverses it) clear at a glance. */
+  var controlsHidden=false;
+  function applyHidden(){
+    $('topbar').style.opacity = controlsHidden?'0':'1';
+    $('topbar').style.pointerEvents = controlsHidden?'none':'auto';
+    $('controls').classList.toggle('hidden',controlsHidden);
+    $('hideBtn').textContent = controlsHidden ? '⤡' : '⤢';
+    $('hideBtn').title = controlsHidden ? 'Show all controls' : 'Hide all controls';
+  }
+  $('hideBtn').onclick=function(){ controlsHidden=!controlsHidden; applyHidden(); };
+
+  /* ========== per-language read toggles (main reading page) ==========
+     Both on by default. Turning one off means that language is skipped by
+     the main play button and by right/left double-tap (which read both
+     languages "per the language selection buttons"). If both are off,
+     nothing is read but auto-advance/navigation still works. */
+  var langEnabled={fr:true, en:true};
+  document.addEventListener('click',function(e){
+    var b=e.target.closest('.langBtn'); if(!b)return;
+    var lang=b.dataset.lang;
+    langEnabled[lang]=!langEnabled[lang];
+    b.classList.toggle('sel', langEnabled[lang]);
+  });
+
+  /* ========== highlight-mode (off / underline / gray background) ==========
+     Purely cosmetic and grayscale-only by design: no color, no layout shift
+     (background/underline only, never border or padding), no animation —
+     so it stays legible and doesn't cause a slow full-screen redraw on
+     e-ink displays, and never gets in the way of the reading itself. */
+  var HL_MODES=['off','underline','highlight'];
+  var hlMode='off';
+  function applyHlMode(){
+    $('stage').dataset.hl = hlMode;
+    $('hlBtn').textContent = 'Highlight: ' + (hlMode==='off' ? 'Off' : hlMode==='underline' ? 'Underline' : 'Gray');
+  }
+  $('hlBtn').addEventListener('click', function(){
+    hlMode = HL_MODES[(HL_MODES.indexOf(hlMode)+1) % HL_MODES.length];
+    applyHlMode();
+  });
+  applyHlMode();
+
+  /* ========== repeat count (0 / 1 / 2 extra repeats per block) ========== */
+  var repeatCount=0;
+  function applyRepeatBtn(){
+    $('repeatBtn').textContent = 'Repeat: ' + (repeatCount===0 ? 'Off' : repeatCount+'×');
+  }
+  $('repeatBtn').addEventListener('click', function(){
+    repeatCount = (repeatCount+1) % 3;
+    applyRepeatBtn();
+  });
+  applyRepeatBtn();
+
+  /* ========== language order (which language is shown & read first) ========== */
+  var langOrder='fr'; // 'fr' = French first (default), 'en' = English first
+  function applyOrderBtn(){ $('orderBtn').textContent = langOrder==='fr' ? 'FR → EN' : 'EN → FR'; }
+  $('orderBtn').addEventListener('click', function(){
+    langOrder = langOrder==='fr' ? 'en' : 'fr';
+    applyOrderBtn();
+    renderBlock(); // re-render immediately so display order flips right away
+  });
+  applyOrderBtn();
+
+  /* ========== headphone / lock-screen media controls ==========
+     Media Session API: gives the OS a "now playing" surface (lock screen,
+     notification shade, Bluetooth/wired headset remote) that routes its
+     play/pause/next/previous controls back into this page — this is what
+     lets a wired headphone's inline button pause/resume playback. Wrapped
+     in try/catch since some of these actions throw in browsers that don't
+     support them, and the whole API may simply not exist. */
+  if('mediaSession' in navigator){
+    try{ navigator.mediaSession.setActionHandler('play', function(){ blurActive(); if(!playing) play(false); else if(paused) resumeReading(); }); }catch(e){}
+    try{ navigator.mediaSession.setActionHandler('pause', function(){ blurActive(); if(playing && !paused) pauseReading(); }); }catch(e){}
+    try{ navigator.mediaSession.setActionHandler('stop', function(){ blurActive(); stop(); }); }catch(e){}
+    try{ navigator.mediaSession.setActionHandler('previoustrack', function(){ blurActive(); prevBlock(); }); }catch(e){}
+    try{ navigator.mediaSession.setActionHandler('nexttrack', function(){ blurActive(); nextBlock(); }); }catch(e){}
+  }
+  // A hardware/headphone/lock-screen control firing shouldn't leave any
+  // on-screen button LOOKING pressed/focused — whatever element happened to
+  // still hold keyboard focus from the person's last on-screen tap gets
+  // blurred before we react, so no focus ring is left "stuck" behind.
+  function blurActive(){
+    try{ var a=document.activeElement; if(a && a!==document.body && typeof a.blur==='function') a.blur(); }catch(e){}
+  }
+  function updateMediaSessionMetadata(){
+    if(!('mediaSession' in navigator) || typeof MediaMetadata==='undefined') return;
+    try{
+      var chTitle=(currentBook && currentBook.chapters && currentBook.chapters[currentChapterIdx]) || '';
+      var bkTitle=currentBook ? currentBook.title : 'Book Reader';
+      navigator.mediaSession.metadata=new MediaMetadata({ title: chTitle||bkTitle, artist: chTitle?bkTitle:'', album:'Book Reader' });
+    }catch(e){}
+  }
+  function updateMediaSessionPlaybackState(){
+    if(!('mediaSession' in navigator)) return;
+    try{ navigator.mediaSession.playbackState = !playing ? 'none' : (paused ? 'paused' : 'playing'); }catch(e){}
+  }
+
+  /* ========== keep going in the background / while the screen is locked ==========
+     Two best-effort techniques, since a plain web page has no guaranteed way
+     to keep running once the screen locks — this covers it as well as the
+     platform allows:
+       1. Screen Wake Lock — keeps the screen from auto-sleeping/locking
+          while actively reading, so it simply never gets backgrounded in
+          the first place. (Released automatically by the browser once the
+          tab IS hidden, e.g. after a manual power-button lock — Wake Lock
+          can only prevent that, not undo it.)
+       2. A real, near-silent, looping <audio> element. Browsers exempt tabs
+          that are actively playing audio from most background throttling/
+          suspension, which in practice is what keeps speechSynthesis
+          callbacks (onend/onboundary) still firing while backgrounded —
+          pure speechSynthesis with no real <audio> playback has no such
+          exemption and tends to get suspended.
+     Chrome on Android generally honors both well. iOS Safari is much more
+     restrictive about background tabs regardless — expect it to stop once
+     truly locked there. */
+  var wakeLock=null;
+  function requestWakeLock(){
+    if(!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function(wl){
+      wakeLock=wl;
+      wakeLock.addEventListener('release', function(){ wakeLock=null; });
+    }).catch(function(){ /* not available right now (e.g. tab not visible yet) — fine, silent */ });
+  }
+  function releaseWakeLock(){ if(wakeLock){ try{ wakeLock.release(); }catch(e){} wakeLock=null; } }
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState==='visible' && playing && !paused && !wakeLock) requestWakeLock();
+  });
+
+  var silentAudioEl=null;
+  function ensureSilentAudio(){
+    if(silentAudioEl) return silentAudioEl;
+    var a=document.createElement('audio');
+    // a ~0.1s silent WAV, looped
+    a.src='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+    a.loop=true; a.volume=0.01; a.setAttribute('playsinline','');
+    a.style.display='none';
+    document.body.appendChild(a);
+    silentAudioEl=a;
+    return a;
+  }
+  function startSilentAudio(){ try{ ensureSilentAudio().play().catch(function(){}); }catch(e){} }
+  function stopSilentAudio(){ if(silentAudioEl){ try{ silentAudioEl.pause(); }catch(e){} } }
+
+  // Central hook called by play()/pauseReading()/resumeReading()/stop() so
+  // media-session state, the wake lock, and the keep-alive audio all stay
+  // in sync with actual playback state without repeating this in each of them.
+  function onPlaybackStateChanged(){
+    updateMediaSessionPlaybackState();
+    if(playing && !paused){ requestWakeLock(); startSilentAudio(); }
+    else { stopSilentAudio(); if(!playing) releaseWakeLock(); }
+  }
+
+  /* ========== block player ========== */
+  var blocks=[], idx=0, playing=false;
+  var playMode='continue'; // 'single' = read the target block only, then stop
+  var curLangPlaying=null; // 'fr' | 'en' | null — which half of the current block is being spoken
+
+  // ---- pause/resume-at-exact-position state ----
+  // `activeChunk` describes whatever SpeechSynthesisUtterance is on-air right
+  // now: which language, the exact text it was given, the onEnd callback the
+  // surrounding order/repeat logic is waiting on, and the last word-boundary
+  // offset reached inside that text (from the utterance's own onboundary
+  // event — most engines fire this per word). Pausing slices the remaining
+  // text at that offset and remembers it in `pausedResume`; resuming just
+  // speaks that remaining text and, crucially, re-uses the SAME onEnd
+  // callback, so the rest of the block/repeat/order chain continues exactly
+  // as if nothing happened. If a voice never fires onboundary, the offset
+  // stays 0 and resume just restarts that language from its own start —
+  // still better than losing the whole block.
+  var paused=false, activeChunk=null, pausedResume=null;
+  var fallbackTimer=null, fallbackDeadline=null;
+
+  /* ---- sentence/line segmentation, for highlighting only the part being
+     spoken instead of the whole paragraph ----
+     Walks the rendered French/English <div> after its HTML is set, and:
+       1. Reconstructs the exact plain text it represents (text nodes as-is,
+          each <br> counted as one space) — this becomes the text actually
+          given to the speech engine, so word-boundary offsets line up
+          perfectly with the segments below by construction.
+       2. Finds segment boundaries: sentence-ending punctuation (. ! ? …)
+          and every <br> (so a "line" — e.g. each answer option in a
+          Question block — is its own segment even with no punctuation).
+       3. Splits the underlying DOM text nodes at those boundaries (plain
+          Text.splitText — a standard, universally-supported DOM method) and
+          wraps each resulting run in a <span class="ttsSeg" data-seg="i">.
+          A segment that crosses a <strong>/<em> boundary just gets two (or
+          more) spans sharing the same data-seg — visually identical to one
+          span, and every one of them lights up together when highlighted. */
+  function extractPlainAndMap(el){
+    var text='', brOffsets=[];
+    (function walk(node){
+      var kids=node.childNodes;
+      for(var i=0;i<kids.length;i++){
+        var c=kids[i];
+        if(c.nodeType===3){ if(c.nodeValue) text+=c.nodeValue; }
+        else if(c.nodeType===1){
+          if(c.tagName==='BR'){ brOffsets.push(text.length); text+=' '; }
+          else walk(c);
+        }
+      }
+    })(el);
+    return { text:text, brOffsets:brOffsets };
+  }
+  function computeBoundaries(text, brOffsets){
+    var bset={}; bset[0]=1; bset[text.length]=1;
+    var re=/[.!?\u2026]+(?:["'\u201d\u2019)\]]*)(?=\s|$)/g, m;
+    while((m=re.exec(text))){ bset[m.index+m[0].length]=1; }
+    brOffsets.forEach(function(o){ bset[o]=1; });
+    var arr=Object.keys(bset).map(Number).sort(function(a,b){return a-b;});
+    var out=[arr[0]];
+    for(var i=1;i<arr.length;i++){ if(arr[i]>out[out.length-1]) out.push(arr[i]); }
+    return out;
+  }
+  function applySentenceSpans(el){
+    var extracted=extractPlainAndMap(el);
+    if(!extracted.text.trim()) return { text:extracted.text, boundaries:[0,extracted.text.length] };
+    var bpoints=computeBoundaries(extracted.text, extracted.brOffsets);
+    var offset=0, segIdx=0;
+    function segIdxFor(pos){ while(segIdx+1<bpoints.length && bpoints[segIdx+1]<=pos) segIdx++; return segIdx; }
+    (function walk(node){
+      var kids=Array.prototype.slice.call(node.childNodes);
+      kids.forEach(function(c){
+        if(c.nodeType===3){
+          var t=c.nodeValue; if(!t) return;
+          var nodeStart=offset;
+          var interior=bpoints.filter(function(p){ return p>nodeStart && p<nodeStart+t.length; });
+          var cur=c, curStart=nodeStart;
+          interior.forEach(function(p){ var rest=cur.splitText(p-curStart); curStart=p; cur=rest; });
+          var node2=c, consumed=0;
+          while(node2 && node2.nodeType===3 && consumed<t.length){
+            var len2=node2.nodeValue.length;
+            var idx=segIdxFor(offset+consumed);
+            var span=document.createElement('span'); span.className='ttsSeg'; span.setAttribute('data-seg',idx);
+            var nextSib=node2.nextSibling;
+            node2.parentNode.insertBefore(span,node2); span.appendChild(node2);
+            consumed+=len2; node2=nextSib;
+          }
+          offset+=t.length;
+        } else if(c.nodeType===1){
+          if(c.tagName==='BR'){ segIdxFor(offset); offset+=1; }
+          else walk(c);
+        }
+      });
+    })(el);
+    return { text:extracted.text, boundaries:bpoints };
+  }
+  function segIndexForOffset(boundaries, pos){
+    for(var i=0;i<boundaries.length-1;i++){ if(pos>=boundaries[i] && pos<boundaries[i+1]) return i; }
+    return Math.max(0, boundaries.length-2);
+  }
+  var frSeg=null, enSeg=null; // {text, boundaries} for the currently-rendered block, set in renderBlock()
+  function updateSegHighlight(lang, absoluteCharIdx){
+    var seg = lang==='fr' ? frSeg : enSeg;
+    var el = $(lang==='fr' ? 'frBlockEl' : 'enBlockEl');
+    if(!seg || !el) return;
+    var idx = segIndexForOffset(seg.boundaries, absoluteCharIdx);
+    var spans=el.querySelectorAll('.ttsSeg');
+    for(var i=0;i<spans.length;i++) spans[i].classList.toggle('speaking', spans[i].getAttribute('data-seg')===String(idx));
+  }
+  function clearSegHighlight(){
+    ['frBlockEl','enBlockEl'].forEach(function(id){
+      var el=$(id); if(!el) return;
+      var spans=el.querySelectorAll('.ttsSeg.speaking');
+      for(var i=0;i<spans.length;i++) spans[i].classList.remove('speaking');
+    });
+  }
+
+  // `base` is the absolute offset (into the full frSeg/enSeg text) that
+  // `text` starts at — 0 for a fresh chunk, or the pause point when this is
+  // a resumed chunk — so segment highlighting stays correct even after a
+  // pause/resume mid-paragraph (see pauseReading/resumeReading below).
+  //
+  // Progress through `text` is normally tracked purely from the engine's own
+  // onboundary charIndex — exact, and this is all that's used wherever it's
+  // supported (this is what already worked correctly, e.g. on iOS). Some
+  // engines — notably many Android voices — never fire onboundary at all,
+  // which otherwise silently breaks both mid-sentence pause/resume (it would
+  // always resume from position 0, i.e. the whole language restarts) and the
+  // highlighted-segment display (it would just never move). To fix that
+  // WITHOUT touching engines that already work: a time-based estimate only
+  // switches on after a grace period with zero real onboundary events, and
+  // the moment a single real one arrives, the estimate is retired for good
+  // and every position from then on comes only from real events — so on an
+  // engine that does fire onboundary, this code path is never even reached.
+  var BOUNDARY_GRACE_MS=600;
+  // The fallback time-estimate (used only when an engine never fires real
+  // onboundary events — in practice, mostly Android) was found to run a bit
+  // AHEAD of the real audio, jumping the highlight to the next sentence
+  // before that sentence had actually finished playing. Treating the block
+  // as if it takes this much longer than the nominal wpm implies slows the
+  // estimate down to better match reality. This constant is only read
+  // inside the estimate-timer branch below — engines that DO report real
+  // onboundary positions (e.g. iOS) never execute that branch at all, so
+  // this has zero effect there.
+  var ANDROID_ESTIMATE_SLOWDOWN=1.35;
+  function speakChunk(lang, text, onEnd, base){
+    base = base||0;
+    curLangPlaying=lang;
+    var chunk={ lang:lang, text:text, base:base, boundaryIdx:0, onEnd:onEnd, startTime:Date.now(), hasRealBoundary:false };
+    activeChunk=chunk;
+    var u=new SpeechSynthesisUtterance(text);
+    applyVoiceSettings(u,lang);
+    var wordCount=text.split(/\s+/).filter(Boolean).length||1;
+    var estDurationMs=Math.max(300, (wordCount/(wpm[lang]||150))*60000) * ANDROID_ESTIMATE_SLOWDOWN;
+    function advanceTo(i){ if(i>chunk.boundaryIdx){ chunk.boundaryIdx=i; updateSegHighlight(lang, base+i); } }
+    var estTimer=setInterval(function(){
+      if(activeChunk!==chunk || chunk.hasRealBoundary){ clearInterval(estTimer); return; } // real events showed up — stand down for good
+      var elapsed=Date.now()-chunk.startTime;
+      if(elapsed<BOUNDARY_GRACE_MS) return; // still giving onboundary a chance to prove it's supported
+      advanceTo(Math.min(text.length, Math.round((elapsed/estDurationMs)*text.length)));
+    }, 150);
+    u.onboundary=function(e){
+      if(activeChunk!==chunk || typeof e.charIndex!=='number') return;
+      chunk.hasRealBoundary=true;
+      advanceTo(e.charIndex);
+    };
+    function finish(){ if(activeChunk!==chunk) return; clearInterval(estTimer); activeChunk=null; curLangPlaying=null; clearSegHighlight(); onEnd(); }
+    u.onend=finish; u.onerror=finish;
+    window.speechSynthesis.speak(u);
+  }
+  // Wraps speakChunk with a one-time retry: if, ~450ms in, our chunk is
+  // STILL the active one (i.e. it hasn't finished — trivially-short chunks
+  // that legitimately completed already are excluded by this check) yet the
+  // engine reports nothing is actually speaking, that's the signature of a
+  // known WebKit/iOS bug where calling speak() right after cancel() (exactly
+  // what resuming from a pause does) silently produces no audio. Re-issuing
+  // it once, from a clean cancel(), reliably recovers it. Deliberately used
+  // ONLY for resuming (see resumeReading) — normal sequential block-to-block
+  // speech was already working fine everywhere, including iOS, so it's left
+  // on the plain speakChunk path rather than adding this check to it too.
+  function speakChunkWithRetry(lang, text, onEnd, base){
+    speakChunk(lang, text, onEnd, base);
+    setTimeout(function(){
+      if(!hasTTS || !activeChunk || activeChunk.lang!==lang || activeChunk.text!==text) return;
+      try{
+        if(!window.speechSynthesis.speaking){
+          window.speechSynthesis.cancel();
+          speakChunk(lang, text, onEnd, base);
+        }
+      }catch(e){}
+    }, 450);
+  }
+
+  function loadBlocks(list){
+    stop();
+    blocks=list||[]; idx=0;
+    $('setup').style.display='none';
+    $('reader').classList.add('on'); $('reader').style.display='flex';
+    renderBlock();
+  }
+
+  function renderBlock(){
+    var inner=$('textInner'); inner.innerHTML='';
+    var b=blocks[idx];
+    if(!b){ $('pos').textContent=0; $('total').textContent=0; $('playBtn').textContent='\u25b6'; frSeg=null; enSeg=null; return; }
+    if(b.label){ var lab=document.createElement('div'); lab.className='blockLabel'; lab.textContent=b.label; inner.appendChild(lab); }
+    var fr=document.createElement('div'); fr.className='frBlock'; fr.id='frBlockEl'; fr.innerHTML=b.fr||'';
+    var en=document.createElement('div'); en.className='enBlock'; en.id='enBlockEl'; en.innerHTML=b.en||'';
+    if(langOrder==='en'){ inner.appendChild(en); inner.appendChild(fr); }
+    else { inner.appendChild(fr); inner.appendChild(en); }
+    frSeg=applySentenceSpans(fr);
+    enSeg=applySentenceSpans(en);
+    $('pos').textContent=blocks.length?idx+1:0;
+    $('total').textContent=blocks.length;
+    $('playBtn').textContent=(playing && !paused)?'\u275a\u275a':'\u25b6';
+    $('textDisplay').scrollTop=0;
+  }
+  function updatePlayBtnIcon(){ $('playBtn').textContent=(playing && !paused)?'\u275a\u275a':'\u25b6'; }
+
+  function applyVoiceSettings(u,t){
+    var selId = t==='fr' ? 'voiceSelectFR' : 'voiceSelectEN';
+    var chosenURI = $(selId).value;
+    var v=null;
+    if(chosenURI){ v=voices.filter(function(x){return x.voiceURI===chosenURI;})[0]||null; }
+    else { v=chooseVoice(t); }
+    if(v&&v.forcedLang){ u.lang=v.forcedLang; }
+    else if(v){ u.voice=v; u.lang=v.lang; }
+    u.rate=Math.max(0.5,Math.min(3.0, wpm[t]/180));
+  }
+
+  // Speak both languages of a block, in whichever order the order-toggle
+  // currently says (default French then English), skipping any language
+  // that's toggled off or has no text, then call `done`. Only ever called
+  // when hasTTS is true — the no-speech-engine fallback is a timed loop
+  // instead (see runCurrentBlock), so `done` here is always reached
+  // asynchronously via a real utterance's onend/onerror, never recursively.
+  // Speaks frSeg.text/enSeg.text (built by applySentenceSpans during the
+  // last renderBlock) rather than the pre-baked b.frText/b.enText — that's
+  // the exact text the on-screen <span> segments were split from, so the
+  // speech engine's word-boundary offsets line up with them exactly.
+  function speakBlockPair(b, done){
+    var order = langOrder==='en' ? ['en','fr'] : ['fr','en'];
+    var i=0;
+    function next(){
+      if(!playing || paused){ return; } // a pause captures its own resume point; don't keep advancing
+      if(i>=order.length){ done(); return; }
+      var lang=order[i++];
+      var seg = lang==='fr' ? frSeg : enSeg;
+      var text = seg ? seg.text : (lang==='fr' ? (b.frText||'') : (b.enText||''));
+      if(!langEnabled[lang] || !text || !text.trim()){ next(); return; }
+      speakChunk(lang, text, next, 0);
+    }
+    next();
+  }
+
+  // Speak ONLY one language of the current block, once, ignoring the FR/EN
+  // read toggles (this is an explicit single-language request from a
+  // middle-zone double-tap, not the general "what to read" setting).
+  function speakSingleLang(b, lang, done){
+    var seg = lang==='fr' ? frSeg : enSeg;
+    var text = seg ? seg.text : (lang==='fr' ? (b.frText||'') : (b.enText||''));
+    if(!text || !text.trim()){ done(); return; }
+    speakChunk(lang, text, done, 0);
+  }
+
+  function play(singleBlockOnly){
+    if(!blocks.length)return;
+    if(idx>=blocks.length)idx=0;
+    playing=true; paused=false; pausedResume=null;
+    playMode = singleBlockOnly ? 'single' : 'continue';
+    renderBlock();
+    onPlaybackStateChanged();
+    runCurrentBlock();
+  }
+  function advanceOrStop(){
+    if(!playing || paused)return;
+    if(playMode==='single'){ stop(); return; }
+    if(idx+1>=blocks.length){ stop(); return; }
+    idx++; renderBlock(); runCurrentBlock();
+  }
+  // Wraps a "speak once" function so it runs repeatCount EXTRA times (so
+  // repeatCount=0 reads it once, 1 reads it twice, 2 reads it three times)
+  // before finally calling `done` — used for both the full FR+EN block and
+  // the single-language middle-tap reading, so "Repeat" applies uniformly.
+  function speakWithRepeats(speakOnce, done){
+    var timesLeft=repeatCount;
+    function again(){
+      speakOnce(function(){
+        if(!playing || paused){ return; }
+        if(timesLeft>0){ timesLeft--; again(); } else { done(); }
+      });
+    }
+    again();
+  }
+  // Rough reading-time estimate (no speech engine available), used only by
+  // the timed fallback below. Multiplied by the repeat count so the silent
+  // fallback still paces itself the same way repeats would with real TTS.
+  function durationForBlock(b){
+    var words=((b.frText||'')+' '+(b.enText||'')).split(/\s+/).filter(Boolean).length;
+    var avgWpm=((wpm.fr+wpm.en)/2)||150;
+    return Math.max(800, words/avgWpm*60000) * (repeatCount+1);
+  }
+  function startFallbackTimer(ms, onEnd){
+    clearTimeout(fallbackTimer);
+    fallbackDeadline=Date.now()+ms;
+    fallbackTimer=setTimeout(function(){ fallbackDeadline=null; onEnd(); }, ms);
+  }
+  function runCurrentBlock(){
+    if(!playing)return;
+    var b=blocks[idx]; if(!b){ stop(); return; }
+    if(!hasTTS){ startFallbackTimer(durationForBlock(b), advanceOrStop); return; }
+    speakWithRepeats(function(cb){ speakBlockPair(b, cb); }, advanceOrStop);
+  }
+  function stop(){
+    playing=false; paused=false; pausedResume=null; activeChunk=null; curLangPlaying=null;
+    clearTimeout(fallbackTimer); fallbackDeadline=null;
+    if(hasTTS){ try{ window.speechSynthesis.cancel(); }catch(e){} }
+    clearSegHighlight();
+    renderBlock();
+    onPlaybackStateChanged();
+  }
+  // Pause at the exact spot for engines with real word-boundary support
+  // (e.g. iOS) — mid-countdown for the no-speech-engine timed fallback —
+  // and resume picks up right there rather than restarting the block. For
+  // engines where we only have the time-ESTIMATED position (mainly
+  // Android — see speakChunk/hasRealBoundary), resuming at that estimate
+  // risks skipping words if it ran slightly ahead of the real audio; there,
+  // resume instead backs up to the START of the previous full sentence —
+  // repeating a little rather than ever skipping — or the very start of the
+  // block if we were still in its first sentence. Only updates the
+  // play/pause icon (not a full renderBlock) so an in-progress scroll
+  // position isn't reset out from under the person mid-pause.
+  function pauseReading(){
+    if(!playing || paused) return;
+    paused=true;
+    if(hasTTS && activeChunk){
+      var chunk=activeChunk; activeChunk=null;
+      var seg = chunk.lang==='fr' ? frSeg : enSeg;
+      var fullText = seg ? seg.text : chunk.text;
+      var absoluteIdx = chunk.base + (chunk.boundaryIdx||0);
+      var resumeAbs = absoluteIdx;
+      if(!chunk.hasRealBoundary && seg && seg.boundaries){
+        var curSegIdx=segIndexForOffset(seg.boundaries, absoluteIdx);
+        var targetSegIdx=Math.max(0, curSegIdx-1);
+        resumeAbs=seg.boundaries[targetSegIdx];
+      }
+      var remain=fullText.slice(resumeAbs);
+      if(!remain){ remain=fullText; resumeAbs=0; } // paused right at/after the end — just replay it on resume
+      pausedResume={ type:'tts', lang:chunk.lang, text:remain, base:resumeAbs, onEnd:chunk.onEnd };
+      try{ window.speechSynthesis.cancel(); }catch(e){}
+      curLangPlaying=null; clearSegHighlight();
+    } else if(fallbackDeadline!=null){
+      var remainMs=Math.max(0, fallbackDeadline-Date.now());
+      clearTimeout(fallbackTimer); fallbackDeadline=null;
+      pausedResume={ type:'timer', ms:remainMs, onEnd: advanceOrStop };
+    }
+    updatePlayBtnIcon();
+    onPlaybackStateChanged();
+  }
+  function resumeReading(){
+    if(!playing || !paused) return;
+    paused=false;
+    var pr=pausedResume; pausedResume=null;
+    if(pr){
+      if(pr.type==='tts') speakChunkWithRetry(pr.lang, pr.text, pr.onEnd, pr.base);
+      else if(pr.type==='timer') startFallbackTimer(pr.ms, pr.onEnd);
+    } else {
+      runCurrentBlock(); // nothing was mid-flight (e.g. paused between blocks) — just continue normally
+    }
+    updatePlayBtnIcon();
+    onPlaybackStateChanged();
+  }
+  function toggle(){
+    if(!playing){ play(false); }
+    else if(paused){ resumeReading(); }
+    else { pauseReading(); }
+  }
+  function gotoBlock(target, playIt){
+    stop();
+    idx=Math.max(0,Math.min(target,blocks.length-1));
+    if(playIt) play(true); else renderBlock();
+  }
+  function nextBlock(){ gotoBlock(idx+1, true); }
+  function prevBlock(){ gotoBlock(idx-1, true); }
+  function replayBlock(){ gotoBlock(idx, true); }
+  function reset(){ gotoBlock(0, false); }
+
+  // Middle-zone double-tap: read only the language of the text that was
+  // tapped (French block or English block), once (or repeatCount extra
+  // times, same as normal playback), then stop — independent of the FR/EN
+  // read toggles above, but still honors the order/repeat settings.
+  function runCurrentBlockSingleLang(lang){
+    if(!playing)return;
+    var b=blocks[idx]; if(!b){ stop(); return; }
+    if(!hasTTS){ startFallbackTimer(durationForBlock(b), advanceOrStop); return; }
+    speakWithRepeats(function(cb){ speakSingleLang(b, lang, cb); }, advanceOrStop);
+  }
+  function replayBlockSingleLang(lang){
+    stop();
+    idx=Math.max(0,Math.min(idx,blocks.length-1));
+    playing=true; playMode='single';
+    renderBlock();
+    runCurrentBlockSingleLang(lang);
+  }
+  // Which language block (French, on top, or English, below it) sits under
+  // a given viewport Y coordinate — used to decide what a middle-zone
+  // double-tap should read.
+  function langAtY(y){
+    var fr=$('frBlockEl'), en=$('enBlockEl');
+    if(en){ var re=en.getBoundingClientRect(); if(y>=re.top && y<=re.bottom) return 'en'; }
+    if(fr){ var rf=fr.getBoundingClientRect(); if(y>=rf.top && y<=rf.bottom) return 'fr'; }
+    if(fr && en){
+      var rf2=fr.getBoundingClientRect(), re2=en.getBoundingClientRect();
+      var midFr=(rf2.top+rf2.bottom)/2, midEn=(re2.top+re2.bottom)/2;
+      return Math.abs(y-midFr)<=Math.abs(y-midEn) ? 'fr' : 'en';
+    }
+    return fr ? 'fr' : 'en';
+  }
+
+  var actions={toggle:toggle, reset:reset, replay:replayBlock,
+    prevBlock:prevBlock, nextBlock:nextBlock,
+    mainDown:function(){changeScale(-SCALE_STEP);}, mainUp:function(){changeScale(SCALE_STEP);}, fontReset:resetFontScale};
+  document.addEventListener('click',function(e){ var el=e.target.closest('[data-act]'); if(el&&actions[el.dataset.act])actions[el.dataset.act](); });
+  document.addEventListener('keydown',function(e){ if(!$('reader').classList.contains('on'))return;
+    if(e.code==='Space'){e.preventDefault();toggle();}
+    else if(e.code==='ArrowLeft')prevBlock(); else if(e.code==='ArrowRight')nextBlock();
+    // Wired-headphone / keyboard media keys (desktop OSes surface a headset's
+    // inline remote as these standard media-key codes when the tab is focused).
+    else if(e.code==='MediaPlayPause'){ e.preventDefault(); blurActive(); toggle(); }
+    else if(e.code==='MediaPlay'){ e.preventDefault(); blurActive(); if(!playing) play(false); else if(paused) resumeReading(); }
+    else if(e.code==='MediaPause'){ e.preventDefault(); blurActive(); if(playing && !paused) pauseReading(); }
+    else if(e.code==='MediaTrackNext'){ e.preventDefault(); blurActive(); nextBlock(); }
+    else if(e.code==='MediaTrackPrevious'){ e.preventDefault(); blurActive(); prevBlock(); } });
+
+  /* ========== double-tap zones ==========
+     Single tap does nothing (so the reading area can be scrolled normally);
+     only a DOUBLE tap/click triggers navigation — right 40% = next block
+     (read, then stop), middle 20% = replay current block (language-aware),
+     left 40% = previous block.
+     This listens directly on #textDisplay (the actual scroll container)
+     rather than a separate overlay div — an overlay on top would intercept
+     wheel/touch events and break native scrolling, since it isn't itself
+     part of #textDisplay's scrollable box. Listening on #textDisplay itself
+     lets normal scroll/wheel pass straight through, and a genuine tap still
+     fires a native 'click' (a scroll/drag gesture does not). */
+  var DBL_MS=350;
+  function makeDoubleTap(el, fn){
+    var lastT=0;
+    el.addEventListener('click',function(e){
+      var t=Date.now();
+      if(t-lastT<=DBL_MS){ lastT=0; fn(e); } else { lastT=t; }
+    });
+  }
+  function zoneAtX(el,x){
+    var r=el.getBoundingClientRect();
+    var frac=(x-r.left)/r.width;
+    if(frac<0.4) return 'left';
+    if(frac>0.6) return 'right';
+    return 'mid';
+  }
+  makeDoubleTap($('textDisplay'), function(e){
+    var zone=zoneAtX($('textDisplay'), e.clientX);
+    if(zone==='right') nextBlock();
+    else if(zone==='left') prevBlock();
+    else replayBlockSingleLang(langAtY(e.clientY));
+  });
+
+})();
+</script>
+</body>
+</html>
